@@ -5,9 +5,11 @@
 STD=-std=c++11
 WARNING=-Wall -Werror
 DEBUG=-g3
-OPT=-O2
+#OPT=-O2
 BUILD_DIR ?= ./build
 SRC_DIRS ?= ./src
+#CC=clang
+#CXX=clang++
 
 SRCS := $(shell find $(SRC_DIRS) -name \*.cpp -or -name \*.c -or -name \*.S)
 OBJS := $(SRCS:%=$(BUILD_DIR)/%.o)
@@ -40,7 +42,7 @@ endif
 P_AS=$(QUIET_C)$(CC) $(FINAL_ASFLAGS)
 P_CC=$(QUIET_C)$(CC) $(FINAL_CFLAGS)
 P_CXX=$(QUIET_CXX)$(CXX) $(FINAL_CXXFLAGS)
-P_LINK=$(QUIET_LINK)$(CXX) $(FINAL_LDFLAGS) $(FINAL_LIBS)
+P_LINK=$(QUIET_LINK)$(CXX) -Wno-unused-command-line-argument $(FINAL_LDFLAGS) $(FINAL_LIBS)
 P_AR=$(QUIET_AR)$(AR) crs
 
 .PHONY: all clean
@@ -65,7 +67,7 @@ $(BUILD_DIR)/%.cpp.o: %.cpp
 
 # exe binary
 %.exe: $(BUILD_DIR)/%.cpp.o $(BUILD_DIR)/p-async.a ../base/build/p-base.a
-	$(P_LINK) -o $@ $^
+	$(P_LINK) $^ -o $@
 
 clean:
 	$(RM) -r $(BUILD_DIR)
