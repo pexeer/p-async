@@ -13,6 +13,14 @@ namespace async {
 
 typedef     uint64_t    SocketId;
 
+inline uint64_t VersionOf(uint64_t id) {
+    return id >> 32;
+}
+
+inline uint64_t RefOf(uint64_t id) {
+    return id & 0xFFFFFFFF;
+}
+
 class UniqueSocketPtr;
 class Accepter;
 class Poller;
@@ -73,23 +81,52 @@ public:
     static Socket* acquire(int fd) {
         SocketId socket_id;
         Socket*  s = SocketFactory::acquire(&socket_id);
-        s->socket_id_ = socket_id + 0x100000000;    // version + 1
         uint64_t vref = s->versioned_ref_.load(std::memory_order_acquire);
-        assert((vref >> 32) == (socket_id >> 32));
-        assert((vref & 0xFFFFFFFF) == 0);
+        assert(VersionOf(vref) == VersionOf(socket_id));
+        assert(RefOf(vref) == 0);
 
-        s->versioned_ref_.fetch_add(0x100000001, std::memory_order_release);
         s->fd_ = fd;
+        // AddVersion
+        s->socket_id_ = socket_id + 0x100000000;    // version + 1
+        // AddVersion & AddRef
+        s->versioned_ref_.fetch_add(0x100000001, std::memory_order_release);
 
         return s;
     }
 
-    static void release(Socket* s) {
-        if (s->fd_) {
-            ::close(s->fd_);
-        }
+    void release() {
+        uint64_t old_vref = versioned_ref_.fetch_sub(0x1, std::memory_order_release);
+        if (RefOf(old_vref) == 1) {
+            LOG_TRACE << "Socket=" << this << ", destroy for socket_id=" << base::HexUint64(socket_id_);
+            // release this
+            if (fd_) {
+                ::close(fd_);
+            }
 
-        SocketFactory::release(s->socket_id_ + 0x100000000);
+            assert(VersionOf(old_vref) == VersionOf(socket_id_) + 1);
+            SocketFactory::release(socket_id_ + 0x100000000);
+        }
+    }
+
+    bool ok() {
+        uint64_t vref = versioned_ref_.load(std::memory_order_acquire);
+        return VersionOf(vref) == VersionOf(socket_id_);
+    }
+
+    bool set_failed(int err) {
+        while (true) {
+            uint64_t vref = versioned_ref_.load(std::memory_order_acquire);
+            if (VersionOf(vref) != VersionOf(socket_id_)) {
+                return false;
+            }
+            if (versioned_ref_.compare_exchange_weak(vref,
+                                                     vref + 0x100000000,
+                                                     std::memory_order_release,
+                                                     std::memory_order_relaxed)) {
+                errno_ = err;
+                return true;
+            }
+        }
     }
 
     friend class UniqueSocketPtr;
@@ -99,6 +136,7 @@ private:
     std::atomic<uint64_t>   versioned_ref_ = {0};
 
     std::atomic<int>        fd_ = {-1};
+    int                     errno_ = 0;
 
     // imutable after create
     SocketId            socket_id_;
@@ -110,6 +148,8 @@ private:
 
     AsyncMessage::Func  on_out_message_ = nullptr;
     void*               out_user_ = nullptr;
+
+    Accepter*           accepter_ = nullptr;
 private:
     P_DISALLOW_COPY(Socket);
 };
@@ -120,21 +160,34 @@ public:
         socket_ = Socket::SocketFactory::find(socket_id);
         if (socket_id != socket_->socket_id_) {
             socket_ = nullptr;
+            return ;
         }
 
+        // AddRef
         uint64_t old_vref = socket_->versioned_ref_.fetch_add(0x1, std::memory_order_release);
 
-        if ((old_vref & 0xFFFFFFFF) == 0) {
-            //socket_->versioned_ref_.
+        if (RefOf(old_vref) && VersionOf(old_vref) == VersionOf(socket_id)) {
+            return ;
         }
+
+        // Add wrong ref, need to do release
+        socket_->release();
+        socket_ = nullptr;
+    }
+
+    UniqueSocketPtr(Socket* s) : socket_(s) {
+        uint64_t old_vref = socket_->versioned_ref_.fetch_add(0x1, std::memory_order_release);
+        if (VersionOf(socket_->socket_id_) == VersionOf(old_vref) && RefOf(old_vref)) {
+            return ;
+        }
+
+        socket_->versioned_ref_.fetch_sub(0x1, std::memory_order_release);
+        socket_ = nullptr;
     }
 
     ~UniqueSocketPtr() {
         if (socket_) {
-            uint64_t old_vref = socket_->versioned_ref_.fetch_sub(0x1, std::memory_order_release);
-            if ((old_vref & 0xFFFFFFFF) == 0) {
-                Socket::release(socket_);
-            }
+            socket_->release();
         }
     }
 
@@ -152,6 +205,10 @@ public:
         Socket* ret = socket_;
         socket_ = ptr->socket_;
         ptr->socket_ = ret;
+    }
+
+    explicit operator bool() const {
+        return socket_;
     }
 
     Socket* operator->() const {

@@ -31,7 +31,6 @@ public:
 protected:
   AsyncWorld*       async_world_;
 
-
   int poll_fd_ = -1;
   int pipe_fds_[2] = {-1, -1};
 };

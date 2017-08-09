@@ -11,10 +11,10 @@ void Accepter::accept() {
     while (true) {
         Socket* new_s = socket_->accept();
         if (new_s) {
+            //new_s->set_on_in_message(&Accepter::on_in_message, new_s);
+            //new_s->set_on_out_message(&Accepter::on_out_message, new_s);
             LOG_INFO << "new socket accpeted, remote=" << new_s->remote_side_;
-            poller_->add_socket(new_s);
-            std::unique_lock<std::mutex>    lock_guard(mutex_);
-            socket_map_.insert(new_s->socket_id());
+            add_socket(new_s);
             continue;
         }
 

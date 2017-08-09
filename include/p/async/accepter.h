@@ -31,8 +31,19 @@ public:
     void accept();
 
     void add_socket(Socket* s) {
+        s->accepter_ = this;
+        poller_->add_socket(s);
         std::unique_lock<std::mutex>    lock_guard(mutex_);
         socket_map_.insert(s->socket_id());
+    }
+
+    void del_socket(Socket* s) {
+        poller_->del_socket(s);
+        {
+            std::unique_lock<std::mutex>    lock_guard(mutex_);
+            socket_map_.erase(s->socket_id());
+        }
+        s->release();
     }
 
 private:

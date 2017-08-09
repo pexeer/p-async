@@ -2,6 +2,7 @@
 // Licensed under a BSD-style license that can be found in the LICENSE file.
 
 #include "p/async/socket.h"
+#include "p/async/accepter.h"
 #include "p/base/endpoint.h"
 #include <errno.h>  // errno
 #include <fcntl.h>  // fctnl
@@ -135,16 +136,17 @@ void Socket::on_in_message() {
         }
 
         if (!ret) {
+            set_failed(0);
             LOG_INFO << "EOF for socket=" << this;
-            break;
+        } else {
+            if (errno == EAGAIN) {
+                return ;
+            }
+            set_failed(errno);
+            LOG_WARN << "ERROR for socket=" << this << ",error=" << strerror(errno);
         }
 
-        // ret < 0
-        if (errno == EAGAIN) {
-            break;
-        }
-
-        LOG_WARN << "ERROR for socket=" << this << ",error=" << strerror(errno);
+        accepter_->del_socket(this);
         return ;
     }
 
