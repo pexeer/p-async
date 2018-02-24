@@ -118,8 +118,8 @@ Socket* Socket::accept() {
 
     new_s->local_side_ = local_side_;
     new_s->remote_side_ = base::EndPoint((struct sockaddr_in*)&new_addr);
-    new_s->set_on_in_message(&Socket::on_in_message, new_s);
-    new_s->set_on_out_message(&Socket::on_out_message, new_s);
+    new_s->set_on_in_message(&Socket::on_in_message);
+    new_s->set_on_out_message(&Socket::on_out_message);
 
     return new_s;
 }
@@ -146,7 +146,8 @@ void Socket::on_in_message() {
             LOG_WARN << "ERROR for socket=" << this << ",error=" << strerror(errno);
         }
 
-        accepter_->del_socket(this);
+
+        ((Accepter*)user_)->del_socket(this);
         return ;
     }
 
@@ -155,6 +156,26 @@ void Socket::on_in_message() {
 
 void Socket::on_out_message() {
     LOG_INFO << " on_out_message ";
+}
+
+void Socket::on_poll_in(void* ptr) {
+    Socket* s = (Socket*)ptr;
+    UniqueSocketPtr socket(s);
+    if (!socket) {
+        return ;
+    }
+
+    socket->on_in_message_(socket.get());
+}
+
+void Socket::on_poll_out(void* ptr) {
+    Socket* s = (Socket*)ptr;
+    UniqueSocketPtr socket(s);
+    if (!socket) {
+        return ;
+    }
+
+    socket->on_out_message_(socket.get());
 }
 
 

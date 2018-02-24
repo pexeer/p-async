@@ -53,7 +53,6 @@ AsyncWorld::AsyncWorld(const SharedQueueOptions& options) : thread_number_(optio
 
 //AsyncWorld::AsyncWorld(const ThreadedQueueOptions& options) {
 
-
 } // end namespace async
 } // end namespace p
 

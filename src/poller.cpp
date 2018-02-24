@@ -14,11 +14,11 @@ namespace async {
 Poller::Poller(AsyncWorld* async_world) : async_world_(async_world) {
     poll_fd_ = ::epoll_create(/*ignore*/ 102400);
     if (poll_fd_ < 0) {
-        LOG_WARN << "Poller create epoll failed for " << strerror(errno);
+        //LOG_WARN << "Poller create epoll failed for " << strerror(errno);
     }
 
     if (::pipe(pipe_fds_) < 0) {
-        LOG_WARN << "Poller create pipe failed for " << strerror(errno);
+        //LOG_WARN << "Poller create pipe failed for " << strerror(errno);
     }
 
     async_world_->push_message(&Poller::poll, this);
@@ -62,11 +62,13 @@ void Poller::poll() {
     LOG_INFO << "Poller epoll_wait return " << n;
 
     for (int i = 0; i< n; ++i) {
-        Socket* s = (Socket*)evts[i].data.u64;
-        if (evts[i].events & (EPOLLIN | EPOLLERR | EPOLLHUP)) {
-            async_world_->push_message(s->on_in_message_, s->in_user_);
+        Socket* s = (Socket*)(evts[i].data.u64);
+        if (evts[i].events & (EPOLLOUT | EPOLLERR | EPOLLHUP)) {
+            //async_world_->push_message(&Socket::on_poll_out, s->socket_id());
+            async_world_->push_message(&Socket::on_poll_out, s);
         } else {
-            async_world_->push_message(s->on_out_message_, s->out_user_);
+            //async_world_->push_message(&Socket::on_poll_in, s->socket_id());
+            async_world_->push_message(&Socket::on_poll_in, s);
         }
     }
 

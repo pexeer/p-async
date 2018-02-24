@@ -6,6 +6,7 @@
 #include "p/base/logging.h"
 
 int main() {
+    p::base::LogMessage::set_wf_log_min_level(p::base::LogLevel::kTrace);
     p::async::SharedQueueOptions  options;
     options.thread_number = 5;
     p::async::AsyncWorld async_world(options);

@@ -7,19 +7,43 @@
 namespace p {
 namespace async {
 
-void Accepter::accept() {
+void Accepter::accept(Socket* s) {
+    Accepter* accepter = (Accepter*) s->user();
     while (true) {
-        Socket* new_s = socket_->accept();
+        Socket* new_s = s->accept();
         if (new_s) {
-            //new_s->set_on_in_message(&Accepter::on_in_message, new_s);
-            //new_s->set_on_out_message(&Accepter::on_out_message, new_s);
+            new_s->set_on_in_message(&Accepter::on_message_in);
+            new_s->set_on_out_message(&Accepter::on_message_out);
             LOG_INFO << "new socket accpeted, remote=" << new_s->remote_side_;
+            new_s->set_user(accepter);
+            accepter->add_socket(new_s);
+            continue;
+        }
+        break;
+    }
+}
+
+void Accepter::on_message_in(Socket* s) {
+    while (true) {
+        Socket* new_s = s->accept();
+        if (new_s) {
+            new_s->set_on_in_message(&Accepter::on_message_in);
+            new_s->set_on_out_message(&Accepter::on_message_out);
+            LOG_INFO << "new socket accpeted, remote=" << new_s->remote_side_;
+            new_s->set_user(this);
             add_socket(new_s);
             continue;
         }
-
         break;
     }
+}
+
+void Accepter::on_message_out(Socket* s) {
+
+}
+
+void Accepter::on_failed(Socket* s) {
+
 }
 
 } // end namespace async

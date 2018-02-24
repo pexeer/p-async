@@ -24,10 +24,24 @@ inline uint64_t RefOf(uint64_t id) {
 class UniqueSocketPtr;
 class Accepter;
 class Poller;
+class Socket;
+
+class SocketUser {
+public:
+    virtual void on_message_in(Socket* s) = 0;
+
+    virtual void on_message_out(Socket* s) = 0;
+
+    virtual void on_failed(Socket* s) = 0;
+};
 
 class P_CACHELINE_ALIGNMENT  Socket {
 public:
     Socket() {}
+
+    static void on_poll_in(void* ptr);
+
+    static void on_poll_out(void* ptr);
 
     SocketId socket_id() const {
         return socket_id_;
@@ -58,17 +72,15 @@ public:
     int set_no_delay();
 
     template<typename Function>
-    void set_on_in_message(Function f, void* user) {
+    void set_on_in_message(Function f) {
         AsyncMessage::Func* tmp = (AsyncMessage::Func*)&f;
         on_in_message_ = *tmp;
-        in_user_ = user;
     }
 
     template<typename Function>
-    void set_on_out_message(Function f, void* user) {
+    void set_on_out_message(Function f) {
         AsyncMessage::Func* tmp = (AsyncMessage::Func*)&f;
         on_out_message_ = *tmp;
-        out_user_ = user;
     }
 
     void on_in_message();
@@ -129,6 +141,14 @@ public:
         }
     }
 
+    void set_user(SocketUser* user) {
+        user_ = user;
+    }
+
+    SocketUser* user() const {
+        return user_;
+    }
+
     friend class UniqueSocketPtr;
     friend class Accepter;
     friend class Poller;
@@ -143,13 +163,10 @@ private:
     base::EndPoint      remote_side_;
     base::EndPoint      local_side_;
 
-    AsyncMessage::Func  on_in_message_ = nullptr;
-    void*               in_user_ = nullptr;
+    AsyncMessage::Func  on_in_message_;
+    AsyncMessage::Func  on_out_message_;
 
-    AsyncMessage::Func  on_out_message_ = nullptr;
-    void*               out_user_ = nullptr;
-
-    Accepter*           accepter_ = nullptr;
+    SocketUser*         user_  = nullptr;
 private:
     P_DISALLOW_COPY(Socket);
 };
